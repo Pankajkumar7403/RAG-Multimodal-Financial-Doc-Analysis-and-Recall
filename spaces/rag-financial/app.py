@@ -126,7 +126,10 @@ def _make_vision_fn(provider: str, api_key: str):
 def do_ingest(pdf_path: str, enable_vision: bool, provider: str, api_key: str):
     global _vector_index, _ingested_filename
 
+    print(f"\n[INGEST START] PDF Path: {pdf_path}", flush=True)
+
     if not pdf_path:
+        print("[INGEST ERROR] No file selected", flush=True)
         return "### No file selected\nPlease upload a PDF above.", gr.update(visible=False)
 
     vision_fn = None
@@ -135,16 +138,26 @@ def do_ingest(pdf_path: str, enable_vision: bool, provider: str, api_key: str):
             vision_fn = _make_vision_fn(provider, api_key)
 
     try:
+        print("[INGEST] Extracting text & chunking PDF...", flush=True)
         result: IngestResult = ingest_pdf(pdf_path, process_vision=enable_vision, vision_fn=vision_fn)
+        print(f"[INGEST OK] Filename: {result.filename} | Chunks: {result.num_chunks} | Pages: {result.num_pages}", flush=True)
     except Exception as exc:
+        import traceback
+        err_msg = traceback.format_exc()
+        print(f"[INGEST FAILED EXCEPTION]:\n{err_msg}", flush=True)
         return f"### Ingestion failed\n\n```\n{str(exc)[:400]}\n```", gr.update(visible=False)
 
     _ingested_filename = result.filename
 
     try:
+        print("[INDEXING START] Building vector store index...", flush=True)
         _vector_index = VectorIndex(embedding_model=_get_embedder())
         index_steps = _vector_index.build(result.chunks)
+        print(f"[INDEXING OK] Indexed {len(_vector_index._chunks)} chunks into vectorstore", flush=True)
     except Exception as exc:
+        import traceback
+        err_msg = traceback.format_exc()
+        print(f"[INDEXING FAILED EXCEPTION]:\n{err_msg}", flush=True)
         return f"### Indexing failed\n\n```\n{str(exc)[:400]}\n```", gr.update(visible=False)
 
     all_steps = result.processing_steps + [""] + index_steps
@@ -171,24 +184,52 @@ def do_query(
     question: str, provider: str, model: str, api_key: str, top_k: int, enable_guardrails: bool,
 ) -> Tuple[str, str, str, str, str]:
 
+    print(f"\n[QUERY START] Question: '{question}' | Provider: {provider} | Model: {model} | Top_K: {top_k}", flush=True)
+
     if not question or not question.strip():
         msg = "### Please enter a question."
+        print("[QUERY CANCELLED] Blank question", flush=True)
         return msg, msg, msg, msg, msg
 
     if _vector_index is None:
         msg = "### No document indexed — please process a PDF first."
+        print("[QUERY ERROR] Vector index is None — user has not ingested a document yet!", flush=True)
         return msg, msg, msg, msg, msg
 
-    chunks, retrieval_steps = _vector_index.search(question.strip(), top_k=int(top_k))
+    try:
+        print("[RETRIEVAL START] Searching hybrid vector store...", flush=True)
+        chunks, retrieval_steps = _vector_index.search(question.strip(), top_k=int(top_k))
+        print(f"[RETRIEVAL OK] Retrieved {len(chunks)} relevant chunks", flush=True)
+    except Exception as exc:
+        import traceback
+        err_msg = traceback.format_exc()
+        print(f"[RETRIEVAL FAILED EXCEPTION]:\n{err_msg}", flush=True)
+        msg = f"### Retrieval error: {str(exc)}"
+        return msg, msg, msg, msg, msg
+
     if not chunks:
         msg = "### No relevant chunks found. Try rephrasing your question."
+        print("[RETRIEVAL WARN] 0 chunks retrieved", flush=True)
         return msg, msg, msg, msg, msg
 
     prov_key = "openai" if "openai" in provider.lower() else "gemini"
-    gen: GenerationResult = generate(question, chunks, prov_key, model, api_key or "")
+    print(f"[LLM GENERATE START] Sending context ({len(chunks)} chunks) to {prov_key}/{model}...", flush=True)
+    
+    try:
+        gen: GenerationResult = generate(question, chunks, prov_key, model, api_key or "")
+        print(f"[LLM GENERATE RESPONSE] Tokens: {gen.prompt_tokens}+{gen.completion_tokens} | Cost: ${gen.cost_usd:.5f} | Latency: {gen.latency_ms:.0f}ms", flush=True)
+        print(f"[ANSWER PREVIEW]:\n{gen.answer[:200]}...", flush=True)
+    except Exception as exc:
+        import traceback
+        err_msg = traceback.format_exc()
+        print(f"[LLM GENERATE FAILED EXCEPTION]:\n{err_msg}", flush=True)
+        msg = f"### Generation error: {str(exc)}"
+        return msg, msg, msg, msg, msg
 
     if enable_guardrails:
+        print("[GUARDRAILS START] Running numeric grounding & PII checks...", flush=True)
         guard: GuardrailResult = run_guardrails(question, gen.answer, [c.text for c in chunks])
+        print(f"[GUARDRAILS OK] Passed: {guard.overall_passed} | Warnings: {len(guard.warnings)}", flush=True)
     else:
         guard = GuardrailResult(
             overall_passed=True, numeric_grounding_passed=True,
@@ -197,6 +238,7 @@ def do_query(
             details=["Guardrails disabled by user setting."], warnings=[],
         )
 
+    print("[QUERY COMPLETE] Returning results to UI.\n", flush=True)
     return (
         _fmt_answer(gen, guard), _fmt_sources(chunks),
         _fmt_pipeline(retrieval_steps, gen), _fmt_guardrails(guard),

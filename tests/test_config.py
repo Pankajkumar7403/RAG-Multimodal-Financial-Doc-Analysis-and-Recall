@@ -163,7 +163,7 @@ class TestLLMConfig:
         assert c.enable_model_routing is True
 
     def test_provider_options(self):
-        for p in ["openai", "anthropic", "azure_openai", "together", "local"]:
+        for p in ["openai", "anthropic", "azure_openai", "together", "local", "grok", "groq", "xai", "local_vllm", "gemini"]:
             c = LLMConfig(provider=p)
             assert c.provider == p
 

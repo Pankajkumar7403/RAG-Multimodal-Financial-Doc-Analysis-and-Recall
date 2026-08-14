@@ -19,10 +19,16 @@ services:
     ports:
       - "8000:8000"   # API
       - "8001:8001"   # Prometheus metrics
+    env_file:
+      - .env
     environment:
-      - ENVIRONMENT=development
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # Compose overrides: in-cluster hostnames win over host .env values
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
       - COHERE_API_KEY=${COHERE_API_KEY:-}
       - ACTIVELOOP_TOKEN=${ACTIVELOOP_TOKEN:-}
       - RAG_API_MASTER_KEY=${RAG_API_MASTER_KEY:-dev-key}
@@ -31,12 +37,16 @@ services:
       - OBSERVABILITY_CONFIG__OTLP_ENDPOINT=http://otel-collector:4317
       - OBSERVABILITY_CONFIG__PROMETHEUS_PORT=8001
       - VECTOR_STORE_CONFIG__DATASET_PATH=/app/data/vectorstore/rag_financial
+      - VECTOR_STORE_CONFIG__EMBEDDING_DIM=384
       - SECURITY_CONFIG__AUDIT_LOG_PATH=/app/audit_logs
       - LOGGING_CONFIG__LEVEL=INFO
       - PYTHONPATH=/app
+      - HF_HOME=/home/raguser/.cache/huggingface
     volumes:
+      - ./src:/app/src
       - rag_data:/app/data
       - audit_logs:/app/audit_logs
+      - huggingface_cache:/home/raguser/.cache/huggingface
     depends_on:
       redis:
         condition: service_healthy
@@ -54,8 +64,10 @@ services:
     image: redis:7.2-alpine
     container_name: rag-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    # Not published to the host — another Redis already binds :6379 locally.
+    # The API reaches this instance on the compose network as redis:6379.
+    expose:
+      - "6379"
     command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --save ""
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -76,6 +88,8 @@ services:
     ports:
       - "4317:4317"   # OTLP gRPC
       - "4318:4318"   # OTLP HTTP
+    depends_on:
+      - jaeger
     networks:
       - rag-net
     profiles: ["observability"]
@@ -131,7 +145,8 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
     networks:
@@ -143,6 +158,8 @@ services:
     image: jaegertracing/all-in-one:1.54
     container_name: rag-jaeger
     restart: unless-stopped
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
     ports:
       - "16686:16686"   # UI
       - "14250:14250"   # gRPC collector
@@ -156,6 +173,7 @@ volumes:
   audit_logs:
   prometheus_data:
   grafana_data:
+  huggingface_cache:
 
 networks:
   rag-net:

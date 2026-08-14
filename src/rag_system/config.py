@@ -13,9 +13,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class VisionConfig(BaseModel):
-    provider: Literal["openai", "qwen2-vl", "pixtral", "internvl"] = "openai"
+    provider: Literal["openai", "gemini", "qwen2-vl", "pixtral", "internvl"] = "openai"
     model: str = "gpt-4o"
-    fallback_model: Optional[str] = "gpt-4-vision-preview"
+    fallback_model: Optional[str] = "gpt-4o"
     max_tokens: int = 1500
     temperature: float = Field(0.2, ge=0.0, le=2.0)
     timeout_seconds: int = 120
@@ -145,9 +145,20 @@ class MultiTenancyConfig(BaseModel):
 
 
 class LLMConfig(BaseModel):
-    provider: Literal["openai", "anthropic", "azure_openai", "together", "local"] = "openai"
+    provider: Literal[
+        "openai",
+        "gemini",
+        "anthropic",
+        "azure_openai",
+        "together",
+        "local",
+        "local_vllm",
+        "grok",
+        "groq",
+        "xai",
+    ] = "openai"
     model: str = "gpt-4o-mini"
-    fallback_model: Optional[str] = "gpt-3.5-turbo"
+    fallback_model: Optional[str] = "gpt-4o-mini"
     temperature: float = Field(0.1, ge=0.0, le=2.0)
     max_tokens: int = 2048
     timeout_seconds: int = 60
@@ -183,6 +194,9 @@ class Config(BaseSettings):
     cohere_api_key: Optional[SecretStr] = Field(None, alias="COHERE_API_KEY")
     activeloop_token: Optional[SecretStr] = Field(None, alias="ACTIVELOOP_TOKEN")
     voyage_api_key: Optional[SecretStr] = Field(None, alias="VOYAGE_API_KEY")
+    xai_api_key: Optional[SecretStr] = Field(None, alias="XAI_API_KEY")
+    groq_api_key: Optional[SecretStr] = Field(None, alias="GROQ_API_KEY")
+    google_api_key: Optional[SecretStr] = Field(None, alias="GOOGLE_API_KEY")
 
     # Sub-configs
     vision_config: VisionConfig = Field(default_factory=VisionConfig)
@@ -256,6 +270,26 @@ class Config(BaseSettings):
         if not self.openai_api_key:
             raise ConfigurationError("OPENAI_API_KEY not set", config_key="openai_api_key")
         return self.openai_api_key.get_secret_value()
+
+    def get_xai_key(self) -> str:
+        from src.rag_system.utils.exceptions import ConfigurationError
+
+        if not self.xai_api_key:
+            raise ConfigurationError(
+                "XAI_API_KEY not set — required for LLM_CONFIG__PROVIDER=xai",
+                config_key="XAI_API_KEY",
+            )
+        return self.xai_api_key.get_secret_value()
+
+    def get_groq_key(self) -> str:
+        from src.rag_system.utils.exceptions import ConfigurationError
+
+        if not self.groq_api_key:
+            raise ConfigurationError(
+                "GROQ_API_KEY not set — required for LLM_CONFIG__PROVIDER=grok or groq",
+                config_key="GROQ_API_KEY",
+            )
+        return self.groq_api_key.get_secret_value()
 
 
 _config: Optional[Config] = None

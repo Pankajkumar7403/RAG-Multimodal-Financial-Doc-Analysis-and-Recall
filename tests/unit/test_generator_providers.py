@@ -73,6 +73,21 @@ class TestBuildGeneratorFactory:
         gen = build_generator("together")
         assert isinstance(gen, LocalVLLMGenerator)
 
+    def test_grok_provider_resolves_to_groq(self):
+        gen = build_generator("grok")
+        assert isinstance(gen, LocalVLLMGenerator)
+        assert "groq.com" in gen._base_url
+
+    def test_groq_provider_resolves(self):
+        gen = build_generator("groq")
+        assert isinstance(gen, LocalVLLMGenerator)
+        assert "groq.com" in gen._base_url
+
+    def test_xai_alias_resolves_to_xai_endpoint(self):
+        gen = build_generator("xai")
+        assert isinstance(gen, LocalVLLMGenerator)
+        assert "x.ai" in gen._base_url
+
     def test_unknown_provider_falls_back_to_openai(self):
         gen = build_generator("some_unknown_provider_xyz")
         assert isinstance(gen, OpenAIGenerator)
@@ -81,10 +96,14 @@ class TestBuildGeneratorFactory:
         gen = build_generator("GEMINI")
         assert isinstance(gen, GeminiGenerator)
 
-    def test_no_provider_arg_reads_from_config(self):
-        # Falls through to cfg.provider (default "openai")
+    def test_no_provider_arg_reads_from_config(self, monkeypatch):
+        monkeypatch.setenv("LLM_CONFIG__PROVIDER", "openai")
+        from src.rag_system.config import reset_config
+
+        reset_config()
         gen = build_generator()
         assert isinstance(gen, OpenAIGenerator)
+        reset_config()
 
 
 # ── Shared helper function tests ──────────────────────────────────────────────
@@ -279,9 +298,39 @@ class TestLocalVLLMGenerator:
         gen = LocalVLLMGenerator()
         assert gen._base_url == "http://gpu-box:9000/v1"
 
+    def test_reads_groq_api_key_from_env(self, monkeypatch):
+        monkeypatch.setenv("GROQ_API_KEY", "gsk-test-key")
+        monkeypatch.delenv("LOCAL_VLLM_API_KEY", raising=False)
+        gen = LocalVLLMGenerator(base_url="https://api.groq.com/openai/v1")
+        assert gen._api_key == "gsk-test-key"
+
+    def test_reads_xai_api_key_from_env(self, monkeypatch):
+        monkeypatch.setenv("XAI_API_KEY", "xai-test-key")
+        monkeypatch.delenv("LOCAL_VLLM_API_KEY", raising=False)
+        gen = LocalVLLMGenerator(base_url="https://api.x.ai/v1")
+        assert gen._api_key == "xai-test-key"
+
+    def test_groq_requires_groq_key(self):
+        gen = LocalVLLMGenerator(
+            base_url="https://api.groq.com/openai/v1",
+            api_key="local",
+            require_cloud_key=True,
+        )
+        with pytest.raises(ConfigurationError):
+            gen._require_api_key()
+
+    def test_xai_requires_xai_key(self):
+        gen = LocalVLLMGenerator(
+            base_url="https://api.x.ai/v1",
+            api_key="local",
+            require_cloud_key=True,
+        )
+        with pytest.raises(ConfigurationError):
+            gen._require_api_key()
+
     @pytest.mark.asyncio
     async def test_generate_success(self, sample_chunks):
-        gen = LocalVLLMGenerator(base_url="http://localhost:8090/v1")
+        gen = LocalVLLMGenerator(base_url="http://localhost:8090/v1", api_key="local")
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "choices": [{"message": {"content": "Revenue was $23.35B."}}],
@@ -304,7 +353,7 @@ class TestLocalVLLMGenerator:
     async def test_connection_error_raises_with_helpful_log(self, sample_chunks):
         import httpx
 
-        gen = LocalVLLMGenerator(base_url="http://localhost:19999/v1")
+        gen = LocalVLLMGenerator(base_url="http://localhost:19999/v1", api_key="local")
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(side_effect=httpx.ConnectError("refused"))

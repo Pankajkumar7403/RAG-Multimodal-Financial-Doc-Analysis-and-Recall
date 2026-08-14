@@ -83,9 +83,11 @@ def _build_context(chunks: List[RetrievedChunk]) -> str:
 def generate_openai(
     query: str, chunks: List[RetrievedChunk], api_key: str, model: str = "gpt-4o-mini",
 ) -> GenerationResult:
+    import os
     steps = [f"Generating answer with OpenAI {model}..."]
     start = time.perf_counter()
     context = _build_context(chunks)
+    api_key = api_key.strip() if api_key else os.environ.get("OPENAI_API_KEY", "")
 
     try:
         import httpx
@@ -142,10 +144,12 @@ def generate_openai(
 def generate_gemini(
     query: str, chunks: List[RetrievedChunk], api_key: str, model: str = "gemini-2.5-flash",
 ) -> GenerationResult:
+    import os
     steps = [f"Generating answer with Google {model}..."]
     start = time.perf_counter()
     context = _build_context(chunks)
     full_prompt = f"{FINANCIAL_RAG_SYSTEM_PROMPT}\n\nContext:\n{context}\n\nQuestion: {query}"
+    api_key = api_key.strip() if api_key else os.environ.get("GOOGLE_API_KEY", "")
 
     try:
         import httpx

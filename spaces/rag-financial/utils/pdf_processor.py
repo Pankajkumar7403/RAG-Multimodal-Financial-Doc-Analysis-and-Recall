@@ -57,15 +57,14 @@ def extract_text_and_tables(pdf_path: str) -> Tuple[List[dict], List[str]]:
             if total_tables:
                 steps.append(f"Found {total_tables} tables across all pages")
     except ImportError:
-        steps.append("pdfplumber not available - trying PyPDF2 fallback")
+        steps.append("pdfplumber not available — using pypdf fallback")
         try:
-            import PyPDF2
-            with open(pdf_path, "rb") as f:
-                reader = PyPDF2.PdfReader(f)
-                for i, page in enumerate(reader.pages, 1):
-                    text = page.extract_text() or ""
-                    pages.append({"page_num": i, "text": text.strip(), "tables": []})
-            steps.append(f"Extracted text (no table detection) from {len(pages)} pages")
+            import pypdf
+            reader = pypdf.PdfReader(pdf_path)
+            for i, page in enumerate(reader.pages, 1):
+                text = page.extract_text() or ""
+                pages.append({"page_num": i, "text": text.strip(), "tables": []})
+            steps.append(f"Extracted text from {len(pages)} pages using pypdf")
         except Exception as e:
             steps.append(f"PDF extraction failed: {str(e)[:80]}")
     except Exception as e:

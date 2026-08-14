@@ -408,35 +408,35 @@ class AnthropicGenerator(BaseGenerator):
         )
 
 
-# ── Local vLLM (open-source, fully private) ───────────────────────────────────
+# ── Local vLLM / OpenAI-compatible (Together, Groq, xAI) ─────────────────────
 
 
 class LocalVLLMGenerator(BaseGenerator):
-    """Generic generator for any open-source LLM served via vLLM's OpenAI-compatible API.
+    """OpenAI-compatible chat endpoint — local vLLM, Together, Groq, xAI, etc.
 
-    Zero data leaves your infrastructure — best for regulated environments
-    that cannot send financial documents to any external API.
+    Zero-data local mode (vLLM) or any OpenAI-compatible cloud host.
 
-    Supported models (examples):
-        meta-llama/Llama-3.1-8B-Instruct
-        meta-llama/Llama-3.1-70B-Instruct
-        Qwen/Qwen2.5-72B-Instruct
-        mistralai/Mistral-Large-Instruct-2407
-
-    Startup:
-        pip install vllm
-        vllm serve meta-llama/Llama-3.1-8B-Instruct --port 8090 --host 0.0.0.0
-
-    Config:
+    Config (local):
         LLM_CONFIG__PROVIDER=local_vllm
         LOCAL_VLLM_GENERATOR_BASE_URL=http://localhost:8090/v1
         LLM_CONFIG__MODEL=meta-llama/Llama-3.1-8B-Instruct
+
+    Config (Groq — LLM_CONFIG__PROVIDER=grok or groq):
+        LLM_CONFIG__PROVIDER=grok
+        LLM_CONFIG__MODEL=llama-3.3-70b-versatile
+        GROQ_API_KEY=gsk-...
+
+    Config (xAI):
+        LLM_CONFIG__PROVIDER=xai
+        LLM_CONFIG__MODEL=grok-2-latest
+        XAI_API_KEY=xai-...
     """
 
     def __init__(
         self,
         base_url: Optional[str] = None,
-        api_key: str = "local",
+        api_key: Optional[str] = None,
+        require_cloud_key: bool = False,
     ) -> None:
         import os
 
@@ -445,10 +445,67 @@ class LocalVLLMGenerator(BaseGenerator):
         self._base_url = (
             base_url or os.environ.get("LOCAL_VLLM_GENERATOR_BASE_URL", "http://localhost:8090/v1")
         ).rstrip("/")
-        self._api_key = api_key
+        base = self._base_url.lower()
+        self._require_cloud_key = require_cloud_key or ("x.ai" in base or "groq.com" in base)
+        self._api_key = api_key if api_key is not None else self._resolve_api_key()
+
+    def _resolve_api_key(self) -> str:
+        import os
+
+        cfg = get_config()
+        base = self._base_url.lower()
+        if "groq.com" in base:
+            if cfg.groq_api_key:
+                return cfg.groq_api_key.get_secret_value()
+            for env_name in ("GROQ_API_KEY", "LOCAL_VLLM_API_KEY"):
+                value = os.environ.get(env_name, "").strip()
+                if value:
+                    return value
+            return "local"
+        if "x.ai" in base:
+            if cfg.xai_api_key:
+                return cfg.xai_api_key.get_secret_value()
+            for env_name in ("XAI_API_KEY", "LOCAL_VLLM_API_KEY"):
+                value = os.environ.get(env_name, "").strip()
+                if value:
+                    return value
+            return "local"
+        for env_name in ("LOCAL_VLLM_API_KEY", "GROQ_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY"):
+            value = os.environ.get(env_name, "").strip()
+            if value:
+                return value
+        return "local"
+
+    def _require_api_key(self) -> str:
+        if self._require_cloud_key and (not self._api_key or self._api_key == "local"):
+            from src.rag_system.utils.exceptions import ConfigurationError
+
+            base = self._base_url.lower()
+            if "groq.com" in base:
+                raise ConfigurationError(
+                    "GROQ_API_KEY not set — required for Groq "
+                    "(LLM_CONFIG__PROVIDER=grok or groq)",
+                    config_key="GROQ_API_KEY",
+                )
+            if "x.ai" in base:
+                raise ConfigurationError(
+                    "XAI_API_KEY not set — required for xAI "
+                    "(LLM_CONFIG__PROVIDER=xai)",
+                    config_key="XAI_API_KEY",
+                )
+            raise ConfigurationError(
+                "LOCAL_VLLM_API_KEY not set — required for this OpenAI-compatible host",
+                config_key="LOCAL_VLLM_API_KEY",
+            )
+        return self._api_key
 
     @property
     def name(self) -> str:
+        base = self._base_url.lower()
+        if "groq.com" in base:
+            return f"groq/{self._cfg.model}"
+        if "x.ai" in base:
+            return f"xai/{self._cfg.model}"
         return f"local_vllm/{self._cfg.model}"
 
     async def generate(
@@ -458,11 +515,16 @@ class LocalVLLMGenerator(BaseGenerator):
         tenant_id: Optional[str] = None,
         system_prompt: Optional[str] = None,
     ) -> GeneratedAnswer:
+        api_key = self._require_api_key()
         context_block = _build_context_block(context)
         user_message = f"Context:\n{context_block}\n\nQuestion: {query}"
 
+        model = self._cfg.model
+        if self._cfg.enable_model_routing and _is_complex_query(query):
+            model = self._cfg.complex_query_model or model
+
         payload = {
-            "model": self._cfg.model,
+            "model": model,
             "messages": [
                 {"role": "system", "content": system_prompt or FINANCIAL_RAG_SYSTEM_PROMPT},
                 {"role": "user", "content": user_message},
@@ -475,22 +537,26 @@ class LocalVLLMGenerator(BaseGenerator):
         try:
             async with (
                 async_trace_span(
-                    "llm_generation", {"model": self._cfg.model, "tenant_id": tenant_id or ""}
+                    "llm_generation", {"model": model, "tenant_id": tenant_id or ""}
                 ),
                 httpx.AsyncClient(timeout=self._cfg.timeout_seconds) as client,
             ):
                 response = await client.post(
                     f"{self._base_url}/chat/completions",
-                    headers={"Authorization": f"Bearer {self._api_key}"},
+                    headers={"Authorization": f"Bearer {api_key}"},
                     json=payload,
                 )
                 response.raise_for_status()
                 data = response.json()
         except httpx.ConnectError:
             logger.error(
-                "local_vllm_generator_connection_failed",
+                "openai_compatible_generator_connection_failed",
                 base_url=self._base_url,
-                hint=f"Start vLLM: vllm serve {self._cfg.model} --host 0.0.0.0 --port 8090",
+                hint=(
+                    "For Groq set GROQ_API_KEY and LLM_CONFIG__PROVIDER=grok. "
+                    "For xAI set XAI_API_KEY and LLM_CONFIG__PROVIDER=xai. "
+                    f"For local vLLM: vllm serve {self._cfg.model} --host 0.0.0.0 --port 8090"
+                ),
             )
             raise
 
@@ -500,10 +566,9 @@ class LocalVLLMGenerator(BaseGenerator):
         completion_tokens = usage.get("completion_tokens", 0)
         answer_text = data["choices"][0]["message"]["content"]
 
-        # Local inference: near-zero marginal cost (infra cost only).
         self._cost_tracker.record(
             tenant_id=tenant_id or "default",
-            model=self._cfg.model,
+            model=model,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
         )
@@ -511,13 +576,34 @@ class LocalVLLMGenerator(BaseGenerator):
         return GeneratedAnswer(
             answer=answer_text,
             citations=context,
-            model_used=self._cfg.model,
+            model_used=model,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             estimated_cost_usd=0.0,
             latency_ms=latency_ms,
             tenant_id=tenant_id,
         )
+
+
+def _build_groq_generator() -> LocalVLLMGenerator:
+    """Groq — OpenAI-compatible API at https://api.groq.com/openai/v1."""
+    import os
+
+    base = os.environ.get("LOCAL_VLLM_GENERATOR_BASE_URL", "https://api.groq.com/openai/v1")
+    return LocalVLLMGenerator(base_url=base, require_cloud_key=True)
+
+
+def _build_grok_generator() -> LocalVLLMGenerator:
+    """Alias for Groq (LLM_CONFIG__PROVIDER=grok)."""
+    return _build_groq_generator()
+
+
+def _build_xai_generator() -> LocalVLLMGenerator:
+    """xAI — OpenAI-compatible API at https://api.x.ai/v1."""
+    import os
+
+    base = os.environ.get("LOCAL_VLLM_GENERATOR_BASE_URL", "https://api.x.ai/v1")
+    return LocalVLLMGenerator(base_url=base, require_cloud_key=True)
 
 
 # ── Factory ────────────────────────────────────────────────────────────────────
@@ -527,33 +613,40 @@ def build_generator(provider: Optional[str] = None) -> BaseGenerator:
     """Factory: build a text generator by provider name.
 
     Reads LLM_CONFIG__PROVIDER from config if provider is not passed explicitly.
-    This is the single switch that lets users choose OpenAI, Gemini, Anthropic,
-    or a fully local/open-source model with zero pipeline code changes.
+    Switch OpenAI, Gemini, Anthropic, Groq, xAI, or local vLLM via .env.
     """
     cfg = get_config().llm_config
     name = (provider or cfg.provider).lower()
 
     providers = {
         "openai": OpenAIGenerator,
-        "azure_openai": OpenAIGenerator,  # same wire protocol; point base URL via env if needed
+        "azure_openai": OpenAIGenerator,
         "gemini": GeminiGenerator,
         "google": GeminiGenerator,
         "anthropic": AnthropicGenerator,
         "claude": AnthropicGenerator,
         "local": LocalVLLMGenerator,
         "local_vllm": LocalVLLMGenerator,
-        "together": LocalVLLMGenerator,  # Together exposes an OpenAI-compatible endpoint too
+        "together": LocalVLLMGenerator,
+        "grok": _build_grok_generator,
+        "groq": _build_groq_generator,
+        "xai": _build_xai_generator,
     }
 
-    generator_cls = providers.get(name)
-    if generator_cls is None:
+    builder = providers.get(name)
+    if builder is None:
         logger.warning(
             "unknown_llm_provider",
             provider=name,
             fallback="openai",
             available=sorted(set(providers.keys())),
         )
-        generator_cls = OpenAIGenerator
+        builder = OpenAIGenerator
 
-    logger.info("generator_provider_selected", provider=name, resolved_class=generator_cls.__name__)
-    return generator_cls()
+    resolved = (
+        builder.__name__
+        if isinstance(builder, type)
+        else f"LocalVLLMGenerator({name})"
+    )
+    logger.info("generator_provider_selected", provider=name, resolved_class=resolved)
+    return builder() if isinstance(builder, type) else builder()

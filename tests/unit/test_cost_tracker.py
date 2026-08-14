@@ -31,7 +31,7 @@ from src.rag_system.utils.cost_tracker import (
 class TestCostRecordPricing:
     def test_gpt4o_pricing(self):
         rec = CostRecord(prompt_tokens=1_000_000, completion_tokens=1_000_000, model="gpt-4o")
-        assert rec.cost_usd == pytest.approx(5.0 + 15.0)
+        assert rec.cost_usd == pytest.approx(2.50 + 10.0)
 
     def test_gpt4o_mini_cheaper_than_gpt4o(self):
         mini = CostRecord(prompt_tokens=1000, completion_tokens=1000, model="gpt-4o-mini")

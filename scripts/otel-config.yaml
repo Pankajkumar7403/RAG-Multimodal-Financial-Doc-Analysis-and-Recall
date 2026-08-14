@@ -15,8 +15,9 @@ processors:
     limit_mib: 256
 
 exporters:
-  jaeger:
-    endpoint: jaeger:14250
+  # Jaeger exporter was removed from the collector; send OTLP to Jaeger instead.
+  otlp/jaeger:
+    endpoint: jaeger:4317
     tls:
       insecure: true
   logging:
@@ -27,4 +28,4 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [jaeger, logging]
+      exporters: [otlp/jaeger, logging]

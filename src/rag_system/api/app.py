@@ -212,4 +212,23 @@ def create_app() -> FastAPI:
     app.include_router(tenants.router, prefix="/api/v1", tags=["Tenants"])
     app.include_router(feedback.router, prefix="/api/v1", tags=["Feedback"])
 
+    @app.get("/", include_in_schema=False)
+    async def root():
+        """Root endpoint redirecting to interactive documentation."""
+        return {
+            "name": "RAG Financial Multimodal API",
+            "version": "2.0.0",
+            "status": "running",
+            "documentation": {
+                "swagger_ui": "/docs",
+                "redoc": "/redoc"
+            },
+            "endpoints": {
+                "health": "/healthz",
+                "ingest": "/api/v1/ingest",
+                "query": "/api/v1/query",
+                "documents": "/api/v1/documents"
+            }
+        }
+
     return app

@@ -16,8 +16,33 @@ from src.rag_system.config import get_config
 logger = structlog.get_logger(__name__)
 
 
+def _deeplake_major() -> int:
+    import deeplake
+
+    return int(str(getattr(deeplake, "__version__", "0")).split(".", 1)[0] or 0)
+
+
+def _open_or_create_v4(path: str, dim: int):
+    """Deep Lake 4.x: create()/open()/add_column() replaced empty()/load()/tensors."""
+    import deeplake
+    from deeplake import types
+
+    if deeplake.exists(path):
+        return deeplake.open(path)
+    ds = deeplake.create(path)
+    ds.add_column("embedding", types.Embedding(size=dim))
+    ds.add_column("text", types.Text())
+    ds.add_column("source_document", types.Text())
+    ds.add_column("page_number", types.Text())
+    ds.add_column("element_type", types.Text())
+    ds.add_column("content_hash", types.Text())
+    ds.add_column("tenant_id", types.Text())
+    ds.commit()
+    return ds
+
+
 class DeepLakeVectorStoreAdapter(BaseVectorStore):
-    """DeepLake vector store with tenant-namespaced datasets."""
+    """DeepLake vector store with tenant-namespaced datasets (Deep Lake 4.x API)."""
 
     def __init__(self) -> None:
         self._cfg = get_config().vector_store_config
@@ -32,6 +57,9 @@ class DeepLakeVectorStoreAdapter(BaseVectorStore):
         if tenant_id and tenant_id != "default":
             return f"{base}_{tenant_id}"
         return base
+
+    def _embedding_dim(self) -> int:
+        return int(self._cfg.embedding_dim or 384)
 
     async def initialize(self, tenant_id: Optional[str] = None) -> None:
         logger.info("deeplake_vector_store_ready", path=self._dataset_path(tenant_id))
@@ -48,35 +76,31 @@ class DeepLakeVectorStoreAdapter(BaseVectorStore):
     def _upsert_sync(
         self, elements: List[DocumentElement], embeddings: List[List[float]], path: str
     ) -> None:
+        if not elements:
+            return
         try:
-            import deeplake
             import numpy as np
 
-            ds = (
-                deeplake.load(path)
-                if deeplake.exists(path)
-                else deeplake.empty(path, overwrite=False)
+            if _deeplake_major() < 4:
+                raise RuntimeError(
+                    "Deep Lake 3.x is no longer supported. Install deeplake>=4.0."
+                )
+            ds = _open_or_create_v4(path, dim=len(embeddings[0]) or self._embedding_dim())
+            ds.append(
+                {
+                    "embedding": np.array(embeddings, dtype="float32"),
+                    "text": [e.text for e in elements],
+                    "source_document": [e.source_document for e in elements],
+                    "page_number": [str(e.page_number or "") for e in elements],
+                    "element_type": [e.type for e in elements],
+                    "content_hash": [e.content_hash or "" for e in elements],
+                    "tenant_id": [e.tenant_id or "" for e in elements],
+                }
             )
-            with ds:
-                if "embedding" not in ds.tensors:
-                    ds.create_tensor("embedding", htype="embedding", dtype="float32")
-                    ds.create_tensor("text", htype="text")
-                    ds.create_tensor("source_document", htype="text")
-                    ds.create_tensor("page_number", htype="text")
-                    ds.create_tensor("element_type", htype="text")
-                    ds.create_tensor("content_hash", htype="text")
-                    ds.create_tensor("tenant_id", htype="text")
-
-                ds.embedding.extend(np.array(embeddings, dtype="float32"))
-                ds.text.extend([e.text for e in elements])
-                ds.source_document.extend([e.source_document for e in elements])
-                ds.page_number.extend([str(e.page_number or "") for e in elements])
-                ds.element_type.extend([e.type for e in elements])
-                ds.content_hash.extend([e.content_hash or "" for e in elements])
-                ds.tenant_id.extend([e.tenant_id or "" for e in elements])
+            ds.commit()
             logger.info("deeplake_upsert_complete", path=path, num_elements=len(elements))
         except ImportError:
-            logger.warning("deeplake_not_installed", detail="pip install deeplake")
+            logger.warning("deeplake_not_installed", detail="pip install deeplake>=4.0")
         except Exception as exc:
             logger.error("deeplake_upsert_failed", error=str(exc))
             raise
@@ -100,8 +124,13 @@ class DeepLakeVectorStoreAdapter(BaseVectorStore):
 
             if not deeplake.exists(path):
                 return []
-            ds = deeplake.load(path, read_only=True)
-            embeddings = ds.embedding.numpy()
+            if _deeplake_major() < 4:
+                logger.error("deeplake_search_failed", error="deeplake>=4.0 required")
+                return []
+            ds = deeplake.open(path)
+            if len(ds) == 0:
+                return []
+            embeddings = np.array(ds["embedding"][:], dtype="float32")
             query = np.array(query_vector, dtype="float32")
             norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
             q_norm = np.linalg.norm(query)
@@ -112,16 +141,16 @@ class DeepLakeVectorStoreAdapter(BaseVectorStore):
             top_indices = np.argsort(similarities)[::-1][:top_k]
             results = []
             for idx in top_indices:
-                score = float(similarities[idx])
-                page = ds.page_number[int(idx)].numpy().tolist()
-                page_num = int(page) if str(page).isdigit() else None
+                i = int(idx)
+                page = str(ds["page_number"][i])
+                page_num = int(page) if page.isdigit() else None
                 results.append(
                     RetrievedChunk(
-                        text=str(ds.text[int(idx)].numpy().tolist()),
-                        score=score,
-                        source_document=str(ds.source_document[int(idx)].numpy().tolist()),
+                        text=str(ds["text"][i]),
+                        score=float(similarities[i]),
+                        source_document=str(ds["source_document"][i]),
                         page_number=page_num,
-                        chunk_id=str(ds.content_hash[int(idx)].numpy().tolist()),
+                        chunk_id=str(ds["content_hash"][i]),
                     )
                 )
             return results

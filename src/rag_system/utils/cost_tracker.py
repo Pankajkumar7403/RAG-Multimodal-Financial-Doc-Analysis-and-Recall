@@ -8,14 +8,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
-# USD per 1M tokens (as of mid-2025)
+# USD per 1M tokens (as of 2026)
 _PRICING: Dict[str, Dict[str, float]] = {
-    "gpt-4o": {"prompt": 5.0, "completion": 15.0},
+    "gpt-4o": {"prompt": 2.50, "completion": 10.0},
     "gpt-4o-mini": {"prompt": 0.15, "completion": 0.60},
-    "gpt-4-vision-preview": {"prompt": 10.0, "completion": 30.0},
-    "gpt-3.5-turbo": {"prompt": 0.50, "completion": 1.50},
+    "gemini-2.5-flash": {"prompt": 0.15, "completion": 0.60},
+    "gemini-2.5-pro": {"prompt": 1.25, "completion": 5.00},
+    "gemini-3.5-flash": {"prompt": 0.15, "completion": 0.60},
     "text-embedding-3-small": {"prompt": 0.02, "completion": 0.0},
     "text-embedding-3-large": {"prompt": 0.13, "completion": 0.0},
+    # Retired model names kept so old configs still cost-account instead of erroring
+    "gpt-4-vision-preview": {"prompt": 2.50, "completion": 10.0},
+    "gpt-3.5-turbo": {"prompt": 0.15, "completion": 0.60},
     "text-embedding-ada-002": {"prompt": 0.10, "completion": 0.0},
 }
 

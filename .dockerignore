@@ -2,6 +2,13 @@
 .venv
 .venv*/
 __pycache__
+spaces/
+demo/
+terraform/
+k8s/
+helm/
+notebooks/
+agent-transcripts/
 *.py[cod]
 *.egg-info
 .env
