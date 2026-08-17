@@ -1,4 +1,5 @@
 import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
+import { ChatPanel } from "@/components/workspace/chat-panel";
 
 export function Workspace() {
   return (
@@ -15,15 +16,7 @@ export function Workspace() {
           <UserButton />
         </div>
       </header>
-      <section className="mx-auto max-w-3xl px-6 py-16">
-        <h2 className="font-medium text-xl">
-          Your document workspace is ready.
-        </h2>
-        <p className="mt-2 text-muted-foreground">
-          Chat, document upload, and source citations are being connected to the
-          RAG API.
-        </p>
-      </section>
+      <ChatPanel />
     </main>
   );
 }
