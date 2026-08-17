@@ -133,3 +133,6 @@ tmp/
 # ── Node (frontend tooling) ───────────────────────────────────────────────────
 node_modules/
 package-lock.json
+
+# ── Local Git worktrees ───────────────────────────────────────────────────────
+.worktrees/
