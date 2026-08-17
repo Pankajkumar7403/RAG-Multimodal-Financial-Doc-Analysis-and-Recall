@@ -30,11 +30,27 @@ import {
   type User,
   user,
   vote,
+  workspaceConversation,
+  workspaceDocumentMeta,
+  workspaceMessage,
 } from "./schema";
 import { generateHashedPassword } from "./utils";
 
 const client = postgres(process.env.POSTGRES_URL ?? "");
-const db = drizzle(client);
+export const db = drizzle(client, {
+  schema: {
+    chat,
+    document,
+    message,
+    stream,
+    suggestion,
+    user,
+    vote,
+    workspaceConversation,
+    workspaceDocumentMeta,
+    workspaceMessage,
+  },
+});
 
 export async function getUser(email: string): Promise<User[]> {
   try {

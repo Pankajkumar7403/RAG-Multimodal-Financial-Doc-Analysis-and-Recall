@@ -2,11 +2,14 @@ import type { InferSelectModel } from "drizzle-orm";
 import {
   boolean,
   foreignKey,
+  index,
   json,
+  jsonb,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -134,3 +137,56 @@ export const stream = pgTable(
 );
 
 export type Stream = InferSelectModel<typeof stream>;
+
+export const workspaceConversation = pgTable(
+  "workspace_conversations",
+  {
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    tenantId: text("tenant_id").notNull(),
+    title: text("title").notNull(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    userId: text("user_id").notNull(),
+  },
+  (table) => [index("workspace_conversations_tenant_idx").on(table.tenantId)]
+);
+
+export const workspaceMessage = pgTable(
+  "workspace_messages",
+  {
+    content: text("content").notNull(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => workspaceConversation.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    ragPayload: jsonb("rag_payload"),
+    role: varchar("role", { enum: ["user", "assistant", "system"] }).notNull(),
+  },
+  (table) => [
+    index("workspace_messages_conversation_idx").on(table.conversationId),
+  ]
+);
+
+export const workspaceDocumentMeta = pgTable(
+  "workspace_document_meta",
+  {
+    backendDocId: text("backend_doc_id").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    errorDetail: text("error_detail"),
+    filename: text("filename").notNull(),
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    status: varchar("status", {
+      enum: ["uploading", "ready", "failed"],
+    }).notNull(),
+    tenantId: text("tenant_id").notNull(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("workspace_document_meta_tenant_idx").on(table.tenantId),
+    uniqueIndex("workspace_document_meta_tenant_backend_doc_idx").on(
+      table.tenantId,
+      table.backendDocId
+    ),
+  ]
+);
