@@ -26,6 +26,7 @@
     "@ai-sdk/otel": "^1.0.15",
     "@ai-sdk/provider": "^4.0.2",
     "@ai-sdk/react": "4.0.16",
+    "@clerk/nextjs": "^7.7.6",
     "@codemirror/lang-python": "^6.2.1",
     "@codemirror/state": "^6.7.0",
     "@codemirror/theme-one-dark": "^6.1.3",

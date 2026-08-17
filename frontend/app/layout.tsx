@@ -1,10 +1,10 @@
+import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import "./globals.css";
-import { SessionProvider } from "next-auth/react";
 
 export const metadata: Metadata = {
   description: "Next.js chatbot template using the AI SDK.",
@@ -74,11 +74,9 @@ export default function RootLayout({
           disableTransitionOnChange
           enableSystem
         >
-          <SessionProvider
-            basePath={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/auth`}
-          >
+          <ClerkProvider>
             <TooltipProvider>{children}</TooltipProvider>
-          </SessionProvider>
+          </ClerkProvider>
         </ThemeProvider>
       </body>
     </html>
