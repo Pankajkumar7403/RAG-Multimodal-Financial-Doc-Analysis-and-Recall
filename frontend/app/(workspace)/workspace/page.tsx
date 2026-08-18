@@ -1,5 +1,16 @@
+import { connection } from "next/server";
+import { Suspense } from "react";
 import { Workspace } from "@/components/workspace/workspace";
 
-export default function WorkspacePage() {
+async function AuthenticatedWorkspace() {
+  await connection();
   return <Workspace />;
+}
+
+export default function WorkspacePage() {
+  return (
+    <Suspense>
+      <AuthenticatedWorkspace />
+    </Suspense>
+  );
 }

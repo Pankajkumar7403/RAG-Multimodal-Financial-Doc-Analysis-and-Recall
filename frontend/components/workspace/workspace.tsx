@@ -1,5 +1,6 @@
 import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
 import { ChatPanel } from "@/components/workspace/chat-panel";
+import { DocumentLibrary } from "@/components/workspace/document-library";
 
 export function Workspace() {
   return (
@@ -16,7 +17,10 @@ export function Workspace() {
           <UserButton />
         </div>
       </header>
-      <ChatPanel />
+      <div className="grid min-h-[calc(100dvh-89px)] md:grid-cols-[20rem_1fr]">
+        <DocumentLibrary />
+        <ChatPanel />
+      </div>
     </main>
   );
 }

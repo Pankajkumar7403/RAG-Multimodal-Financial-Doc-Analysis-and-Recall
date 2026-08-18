@@ -1,10 +1,13 @@
 import { CitationDrawer } from "@/components/workspace/citation-drawer";
+import { FeedbackControls } from "@/components/workspace/feedback-controls";
 import { MetricsCards } from "@/components/workspace/metrics-cards";
 import type { QueryResponse } from "@/lib/rag/contracts";
 
 export type WorkspaceMessage = {
   content: string;
   id: string;
+  queryId?: string;
+  queryText?: string;
   ragPayload?: Pick<QueryResponse, "guardrails" | "metrics" | "sources">;
   role: "user" | "assistant";
 };
@@ -28,6 +31,19 @@ export function ChatMessage({ message }: { message: WorkspaceMessage }) {
           </p>
           <CitationDrawer sources={message.ragPayload.sources} />
           <MetricsCards metrics={message.ragPayload.metrics} />
+          {message.queryId && message.queryText ? (
+            <FeedbackControls
+              answerText={message.content}
+              latencyMs={
+                typeof message.ragPayload.metrics.total_latency_ms === "number"
+                  ? message.ragPayload.metrics.total_latency_ms
+                  : undefined
+              }
+              queryId={message.queryId}
+              queryText={message.queryText}
+              sources={message.ragPayload.sources}
+            />
+          ) : null}
         </>
       ) : null}
     </article>

@@ -42,6 +42,8 @@ export function ChatPanel() {
         {
           content: result.answer ?? "No answer was returned.",
           id: generateUUID(),
+          queryId: generateUUID(),
+          queryText: query,
           ragPayload: result,
           role: "assistant",
         },
@@ -58,7 +60,7 @@ export function ChatPanel() {
   }, []);
 
   return (
-    <section className="flex min-h-[calc(100dvh-89px)] flex-col">
+    <section className="flex min-h-0 flex-col">
       <div className="flex-1 space-y-4 overflow-y-auto p-6">
         {messages.length ? (
           messages.map((message) => (

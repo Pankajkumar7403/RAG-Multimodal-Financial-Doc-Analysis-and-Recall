@@ -4,7 +4,12 @@ type RagEnvironment = Partial<
   Record<"RAG_API_URL" | "RAG_API_MASTER_KEY", string>
 >;
 
-export function getRagConfig(environment: RagEnvironment = process.env) {
+export function getRagConfig(
+  environment: RagEnvironment = {
+    RAG_API_MASTER_KEY: process.env.RAG_API_MASTER_KEY,
+    RAG_API_URL: process.env.RAG_API_URL,
+  }
+) {
   const url = environment.RAG_API_URL?.replace(/\/+$/, "");
   const apiKey = environment.RAG_API_MASTER_KEY;
 
