@@ -272,4 +272,4 @@ make query Q="What was Q3 revenue?"
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Built with care by [@Mattral](https://github.com/Mattral).
+MIT — see [LICENSE](LICENSE). Built with care 
