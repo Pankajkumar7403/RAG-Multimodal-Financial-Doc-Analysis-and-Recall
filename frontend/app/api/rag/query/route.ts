@@ -1,6 +1,7 @@
 import { ZodError } from "zod";
 import {
   forwardRagRequest,
+  proxyErrorResponse,
   safeProxyResponse,
 } from "@/app/api/rag/_lib/server";
 import { queryRequestSchema, queryResponseSchema } from "@/lib/rag/contracts";
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
-    const safeResponse = safeProxyResponse(upstream);
+    const safeResponse = await safeProxyResponse(upstream);
 
     if (!safeResponse.ok) {
       return safeResponse;
@@ -28,9 +29,6 @@ export async function POST(request: Request) {
       );
     }
 
-    return Response.json(
-      { detail: "The RAG request could not be completed." },
-      { status: 502 }
-    );
+    return proxyErrorResponse(error, "The RAG request could not be completed.");
   }
 }

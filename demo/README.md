@@ -1,32 +1,46 @@
 # Streamlit Demo UI
 
-Simple web interface for the RAG Financial Multimodal pipeline.
+Local web UI for the RAG Financial Multimodal pipeline. No FastAPI or Next.js required.
 
-## Run locally
+## Prerequisites
+
+1. Activate the project virtualenv and install demo deps:
 
 ```bash
-pip install streamlit
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
+pip install -r demo/requirements.txt
+```
+
+2. Ensure the repo-root `.env` has your LLM credentials (Groq / Gemini / OpenAI).
+
+## Run
+
+```bash
 streamlit run demo/app.py
 ```
 
 Opens at http://localhost:8501
 
-## Features
-- Upload PDFs and ingest with live progress
-- Ask questions with source citations and page numbers
-- Query analysis panel (intent, complexity, filters)
-- Latency and cost metrics per query
-- Thumbs up/down feedback
-- Example questions for quick exploration
+## What it does
 
-## Screenshot
-The UI shows:
-1. Sidebar — API key, tenant ID, file upload, settings
-2. Main area — query input, answer, expandable sources, metrics, feedback
+- Loads `.env` automatically (provider, API keys, embedding model)
+- Uses an **in-memory** vector store + cache so Docker Redis is not required
+- Upload PDFs → ingest → ask questions with citations, latency, and cost metrics
 
-## For production
-Replace the in-memory vector store with DeepLake or pgvector by setting
-environment variables before launching:
+## Tips
+
+- Keep **Top-K ≤ 4–5** on Groq free/dev tiers to avoid payload-too-large errors
+- Vision/chart extraction needs `GOOGLE_API_KEY` when using Gemini vision
+- Ingested docs live only for this Streamlit session (memory store)
+
+## Optional: persistent DeepLake store
+
 ```bash
-VECTOR_STORE_CONFIG__PROVIDER=deeplake VECTOR_STORE_CONFIG__DATASET_PATH=./data/vectorstore OPENAI_API_KEY=sk-... streamlit run demo/app.py
+# Override before launch if you want disk persistence instead of memory
+$env:VECTOR_STORE_CONFIG__PROVIDER="deeplake"
+$env:VECTOR_STORE_CONFIG__DATASET_PATH="./data/vectorstore/demo"
+streamlit run demo/app.py
 ```
+
+(Edit `demo/app.py` `_load_env()` if you want DeepLake as the default.)

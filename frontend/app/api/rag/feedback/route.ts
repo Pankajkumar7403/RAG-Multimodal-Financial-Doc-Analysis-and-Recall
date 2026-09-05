@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
-    const safeResponse = safeProxyResponse(upstream);
+    const safeResponse = await safeProxyResponse(upstream);
 
     if (!safeResponse.ok) {
       return safeResponse;

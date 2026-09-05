@@ -1,5 +1,6 @@
 import {
   forwardRagRequest,
+  proxyErrorResponse,
   safeProxyResponse,
 } from "@/app/api/rag/_lib/server";
 
@@ -14,17 +15,14 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
       `/api/v1/documents/${encodeURIComponent(documentId)}`,
       { method: "DELETE" }
     );
-    const safeResponse = safeProxyResponse(upstream);
+    const safeResponse = await safeProxyResponse(upstream);
 
     if (!safeResponse.ok) {
       return safeResponse;
     }
 
     return Response.json(await upstream.json());
-  } catch {
-    return Response.json(
-      { detail: "The document could not be deleted." },
-      { status: 502 }
-    );
+  } catch (error) {
+    return proxyErrorResponse(error, "The document could not be deleted.");
   }
 }

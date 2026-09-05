@@ -33,7 +33,7 @@ export async function forwardRagRequest(path: string, init: RequestInit) {
   })(path, init);
 }
 
-export function safeProxyResponse(response: Response) {
+export async function safeProxyResponse(response: Response) {
   if (response.ok) {
     return response;
   }
@@ -45,8 +45,33 @@ export function safeProxyResponse(response: Response) {
     );
   }
 
+  let detail = "The RAG request could not be completed.";
+  try {
+    const payload = (await response.clone().json()) as {
+      detail?: unknown;
+      error?: unknown;
+    };
+    if (typeof payload.detail === "string" && payload.detail.trim()) {
+      detail = payload.detail;
+    } else if (typeof payload.error === "string" && payload.error.trim()) {
+      detail = payload.error;
+    }
+  } catch {
+    // Keep the generic fallback when the upstream body is not JSON.
+  }
+
+  return Response.json({ detail }, { status: response.status });
+}
+
+export function proxyErrorResponse(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : fallback;
+  const isConfigError =
+    message.includes("RAG_API_URL") ||
+    message.includes("RAG_API_MASTER_KEY") ||
+    message.includes("Authentication is required");
+
   return Response.json(
-    { detail: "The RAG request could not be completed." },
-    { status: response.status }
+    { detail: isConfigError ? message : fallback },
+    { status: isConfigError ? 500 : 502 }
   );
 }

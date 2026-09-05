@@ -19,6 +19,7 @@ from src.rag_system.components.generator import (
     OpenAIGenerator,
     _build_context_block,
     _is_complex_query,
+    fit_chunks_to_context_budget,
     build_generator,
 )
 from src.rag_system.utils.exceptions import ConfigurationError
@@ -152,6 +153,38 @@ class TestBuildContextBlock:
         block = _build_context_block(chunks)
         assert "Source 1" in block
         assert "Source 2" in block
+
+
+class TestFitChunksToContextBudget:
+    def test_trims_oversized_chunks_and_count(self):
+        chunks = [
+            RetrievedChunk(
+                text="x" * 5000,
+                score=0.9,
+                source_document=f"doc-{index}.pdf",
+                page_number=index,
+            )
+            for index in range(10)
+        ]
+        fitted, was_trimmed = fit_chunks_to_context_budget(
+            chunks,
+            max_context_tokens=1200,
+            reserved_tokens=200,
+            max_chars_per_chunk=900,
+        )
+        assert was_trimmed is True
+        assert len(fitted) < len(chunks)
+        assert all(len(chunk.text) <= 900 for chunk in fitted)
+
+    def test_preserves_small_context(self, sample_chunks):
+        fitted, was_trimmed = fit_chunks_to_context_budget(
+            sample_chunks,
+            max_context_tokens=6000,
+            reserved_tokens=200,
+            max_chars_per_chunk=1400,
+        )
+        assert was_trimmed is False
+        assert fitted == sample_chunks
 
 
 # ── OpenAIGenerator tests (mocked HTTP) ────────────────────────────────────────

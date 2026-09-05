@@ -74,7 +74,10 @@ export default function RootLayout({
           disableTransitionOnChange
           enableSystem
         >
-          <ClerkProvider>
+          <ClerkProvider
+            telemetry={false}
+            unsafe_disableDevelopmentModeConsoleWarning
+          >
             <TooltipProvider>{children}</TooltipProvider>
           </ClerkProvider>
         </ThemeProvider>

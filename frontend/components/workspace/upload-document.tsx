@@ -1,26 +1,28 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { PaperclipIcon } from "lucide-react";
+import { useCallback, useId, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export type DocumentStatus = "uploading" | "ready" | "failed";
 
 export function UploadDocument({
+  className,
+  compact = false,
   onUploaded,
 }: {
+  className?: string;
+  compact?: boolean;
   onUploaded: () => Promise<void> | void;
 }) {
+  const inputId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string>();
   const [status, setStatus] = useState<DocumentStatus>("ready");
 
-  const handleFile = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      event.target.value = "";
-
-      if (!file) {
-        return;
-      }
-
+  const uploadFile = useCallback(
+    async (file: File) => {
       if (file.type !== "application/pdf") {
         setStatus("failed");
         setError("Only PDF documents can be uploaded.");
@@ -61,19 +63,55 @@ export function UploadDocument({
     [onUploaded]
   );
 
+  const handleFile = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      if (!file) {
+        return;
+      }
+      await uploadFile(file);
+    },
+    [uploadFile]
+  );
+
+  const openPicker = useCallback(() => {
+    inputRef.current?.click();
+  }, []);
+
   return (
-    <div className="space-y-2">
-      <label className="block font-medium text-sm" htmlFor="upload-pdf">
-        Upload PDF
-      </label>
+    <div className={cn("space-y-2", className)}>
       <input
-        className="block w-full text-sm"
-        disabled={status === "uploading"}
-        id="upload-pdf"
+        aria-label="Upload PDF"
+        className="sr-only"
+        disabled={false}
+        id={inputId}
         onChange={handleFile}
+        ref={inputRef}
         type="file"
       />
-      {status === "uploading" ? (
+      {compact ? (
+        <Button
+          aria-label="Upload PDF"
+          onClick={openPicker}
+          size="icon"
+          type="button"
+          variant="ghost"
+        >
+          <PaperclipIcon className="size-4" />
+        </Button>
+      ) : (
+        <Button
+          className="w-full justify-start gap-2"
+          onClick={openPicker}
+          type="button"
+          variant="outline"
+        >
+          <PaperclipIcon className="size-4" />
+          {status === "uploading" ? "Uploading PDF…" : "Upload PDF"}
+        </Button>
+      )}
+      {!compact && status === "uploading" ? (
         <p className="text-muted-foreground text-xs">Uploading…</p>
       ) : null}
       {error ? <p className="text-destructive text-xs">{error}</p> : null}

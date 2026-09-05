@@ -1,5 +1,6 @@
 import {
   forwardRagRequest,
+  proxyErrorResponse,
   safeProxyResponse,
 } from "@/app/api/rag/_lib/server";
 
@@ -26,17 +27,14 @@ export async function POST(request: Request) {
       body: upstreamFormData,
       method: "POST",
     });
-    const safeResponse = safeProxyResponse(upstream);
+    const safeResponse = await safeProxyResponse(upstream);
 
     if (!safeResponse.ok) {
       return safeResponse;
     }
 
     return Response.json(await upstream.json());
-  } catch {
-    return Response.json(
-      { detail: "The document could not be uploaded." },
-      { status: 502 }
-    );
+  } catch (error) {
+    return proxyErrorResponse(error, "The document could not be uploaded.");
   }
 }

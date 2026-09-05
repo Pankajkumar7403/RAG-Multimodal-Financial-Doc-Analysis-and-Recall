@@ -29,7 +29,7 @@ describe("POST /api/rag/query", () => {
       tenant_id: "org_42",
     });
     forwardRagRequest.mockResolvedValue(upstream);
-    safeProxyResponse.mockReturnValue(upstream);
+    safeProxyResponse.mockResolvedValue(upstream);
 
     const request = new Request("http://localhost/api/rag/query", {
       body: JSON.stringify({

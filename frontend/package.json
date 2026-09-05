@@ -3,24 +3,27 @@
   "version": "3.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbo",
     "build": "tsx lib/db/migrate && next build --webpack",
-    "start": "next start",
     "check": "ultracite check",
-    "fix": "ultracite fix",
-    "prepare": "husky",
+    "db:check": "drizzle-kit check",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "npx tsx lib/db/migrate.ts",
-    "db:studio": "drizzle-kit studio",
-    "db:push": "drizzle-kit push",
     "db:pull": "drizzle-kit pull",
-    "db:check": "drizzle-kit check",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
     "db:up": "drizzle-kit up",
-    "test": "export PLAYWRIGHT=True && pnpm exec playwright test",
-    "test:unit": "vitest run",
-    "test:unit:watch": "vitest",
+    "dev": "next dev --webpack",
+    "fix": "ultracite fix",
+    "lint": "npm run check",
+    "prepare": "husky",
+    "start": "next start",
+    "test": "playwright test",
     "test:e2e": "playwright test",
-    "lint": "pnpm check"
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest"
+  },
+  "lint-staged": {
+    "*": "corepack pnpm run fix --"
   },
   "dependencies": {
     "@ai-sdk/otel": "^1.0.15",
@@ -96,6 +99,7 @@
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.3.2",
     "@tailwindcss/typography": "^0.5.20",
+    "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.4",
@@ -117,9 +121,6 @@
     "typescript": "^5.6.3",
     "ultracite": "^7.8.4",
     "vitest": "^3.2.4"
-  },
-  "lint-staged": {
-    "*": "corepack pnpm run fix --"
   },
   "packageManager": "pnpm@10.32.1"
 }

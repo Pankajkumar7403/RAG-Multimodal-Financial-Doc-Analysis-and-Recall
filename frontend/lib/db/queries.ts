@@ -36,7 +36,9 @@ import {
 } from "./schema";
 import { generateHashedPassword } from "./utils";
 
-const client = postgres(process.env.POSTGRES_URL ?? "");
+const client = postgres(
+  process.env.POSTGRES_URL ?? process.env.DATABASE_URL ?? ""
+);
 export const db = drizzle(client, {
   schema: {
     chat,
